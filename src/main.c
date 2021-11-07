@@ -6,7 +6,7 @@
 /*   By: yhetman <yhetman@student.unit.ua>                                    */
 /*                                                                            */
 /*   Created: 2021/10/19 00:53:08 by yhetman                                  */
-/*   Updated: 2021/10/19 00:53:10 by yhetman                                  */
+/*   Updated: 2021/11/07 23:59:10 by yhetman                                  */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,19 +27,19 @@ get_flags(int argc, char ** argv, FILE ** input, FILE ** output,
         switch (flag)
         {
             case 'i':
-                *input = fopen(optarg, "r");
+                *input = fopen(optarg, "rb");
                 check_flags++;
                 break;
             case 'o':
-                *output = fopen(optarg, "w+");
+                *output = fopen(optarg, "wb");
                 check_flags++;
                 break;
             case 'k':
-                *key = fopen(optarg, "r");
+                *key = fopen(optarg, "rb");
                 check_flags++;
                 break;
             case 'n':
-                *nonce = fopen(optarg, "r");
+                *nonce = fopen(optarg, "rb");
                 check_flags++;
                 break;
             case 'd':
@@ -66,17 +66,50 @@ get_flags(int argc, char ** argv, FILE ** input, FILE ** output,
     return 0;
 }
 
+
+
 int
 main(int argc, char **argv)
 {
-	FILE 	*input,
-			*output,
-			*key,
-			*nonce;
-	bool	mode = true;
-	//uint8_t	buff[BUFFER_SIZE];
-
-
-    if (get_flags(argc, argv, &input, &output, &key, &nonce, &mode) != 0)
+    FILE    *input,
+            *output,
+            *keyfile,
+            *noncefile;
+    bool    mode = true;
+    size_t  rounds;
+    uint8_t buff[64],
+            kstream[64],
+            cblock[64],
+            key[32],
+            nonce[8];
+    uint64_t count = 0;
+    
+    if (get_flags(argc, argv, &input, &output, &keyfile,
+        &noncefile, &mode) != 0)
        return 1;
+
+    if ((rounds = fread(key, 1, 32, keyfile)) != 32)
+    {
+        printf("Error. Key has incorrect size\n");
+        exit(1);
+    }
+    if ((rounds = fread(nonce, 1, 8, noncefile)) != 8)
+    {
+        printf("Error. Nonce has incorrect size\n");
+        exit(1);
+    }
+    
+    while ((rounds = fread(buff, 1, 64, input)))
+    {
+        salsa20(key, nonce, count, kstream);
+        for (size_t i = 0; i < rounds; i++)
+            cblock[i] = buff[i] ^ kstream[i];
+        fwrite(cblock, 1, rounds, output);
+        count++;
+    };
+    fclose(input);
+    fclose(output);
+    fclose(noncefile);
+    fclose(keyfile);
+    return 0;
 }
